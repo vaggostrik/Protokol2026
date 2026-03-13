@@ -261,18 +261,40 @@ class SearchPanel(QWidget):
             self.open_protocol.emit(pid)
 
     def _delete_selected(self):
+        from database.models import Protocol, EmailLog
+        from ui.widgets import ConfirmDialog
+        from PyQt6.QtWidgets import QMessageBox
+
         pid = self._table.selected_protocol_id()
         if not pid:
             return
-        from ui.widgets import ConfirmDialog
-        if ConfirmDialog.ask(self, "Διαγραφή", "Να διαγραφεί το επιλεγμένο έγγραφο;"):
-            p = self._session.get(type(None).__class__, pid)
-            from database.models import Protocol
-            p = self._session.get(Protocol, pid)
-            if p:
-                self._session.delete(p)
-                self._session.commit()
-                self.do_search()
+
+        p = self._session.get(Protocol, pid)
+        if not p:
+            return
+
+        proto_num = p.protocol_full or str(p.protocol_number or pid)
+        if not ConfirmDialog.ask(
+            self,
+            "Διαγραφή Εγγράφου",
+            f"Να διαγραφεί οριστικά το έγγραφο\n«{proto_num}»;\n\n"
+            "Θα διαγραφούν επίσης όλα τα συνημμένα και το ιστορικό του."
+        ):
+            return
+
+        try:
+            # Delete email logs manually (no cascade on that relation)
+            self._session.query(EmailLog).filter_by(protocol_id=pid).delete(
+                synchronize_session=False)
+            self._session.delete(p)
+            self._session.commit()
+            QMessageBox.information(self, "Διαγραφή",
+                                    f"Το έγγραφο {proto_num} διαγράφηκε.")
+            self.do_search()
+        except Exception as ex:
+            self._session.rollback()
+            QMessageBox.critical(self, "Σφάλμα Διαγραφής",
+                                 f"Αδυναμία διαγραφής:\n{ex}")
 
     def _email_selected(self):
         pid = self._table.selected_protocol_id()
