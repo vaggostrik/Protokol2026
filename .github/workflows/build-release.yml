@@ -1,0 +1,81 @@
+name: Build Windows EXE & Release
+
+on:
+  push:
+    tags:
+      - "v*"          # Τρέχει όταν κάνεις: git tag v1.0.0 && git push --tags
+  workflow_dispatch:  # Επίσης χειροκίνητα από το GitHub Actions tab
+
+jobs:
+  build-windows:
+    name: Build EXE on Windows
+    runs-on: windows-latest
+
+    steps:
+      # 1. Κατέβασε τον κώδικα
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Εγκατάσταση Python 3.11
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. Εγκατάσταση dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install PyQt6 PyQt6-Qt6
+          pip install SQLAlchemy
+          pip install reportlab
+          pip install python-docx openpyxl
+          pip install Pillow
+          pip install python-dateutil
+          pip install pywin32
+
+      # 4. Build EXE με PyInstaller
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller protokol.spec
+
+      # 5. Συμπίεση σε ZIP
+      - name: Zip the build
+        run: |
+          Compress-Archive -Path "dist\Protokol2026\*" -DestinationPath "Protokol2026_Windows.zip"
+        shell: pwsh
+
+      # 6. Ανέβασε ως artifact (διαθέσιμο στο Actions tab)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Protokol2026-Windows
+          path: Protokol2026_Windows.zip
+          retention-days: 30
+
+      # 7. Αν τρέχει από tag → Δημιούργησε GitHub Release με το .zip
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Protokol2026_Windows.zip
+          name: "Σύστημα Πρωτοκόλλου ${{ github.ref_name }}"
+          body: |
+            ## Σύστημα Ηλεκτρονικού Πρωτοκόλλου ${{ github.ref_name }}
+
+            ### Εγκατάσταση
+            1. Κατεβάστε το `Protokol2026_Windows.zip`
+            2. Αποσυμπιέστε σε φάκελο της επιλογής σας
+            3. Εκτελέστε `Protokol2026.exe`
+
+            > ⚠️ Αν εμφανιστεί προειδοποίηση Windows Defender, κάντε κλικ **"Περισσότερες πληροφορίες" → "Εκτέλεση"**
+
+            ### Απαιτήσεις
+            - Windows 10 / 11 (64-bit)
+            - Δεν απαιτείται εγκατάσταση Python ή άλλου λογισμικού
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
