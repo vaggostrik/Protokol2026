@@ -534,12 +534,24 @@ class ProtocolForm(QDialog):
         row = self._att_table.currentRow()
         if row < 0:
             return
+        from utils.stamp import stamp_and_open
+        from utils.helpers import format_date_short
+
+        proto_num  = ""
+        proto_date = ""
+        if self._protocol:
+            proto_num  = self._protocol.protocol_full or ""
+            proto_date = format_date_short(self._protocol.protocol_date) if self._protocol.protocol_date else ""
+
         if self._protocol and row < len(self._protocol.attachments):
             att = self._protocol.attachments[row]
-            if os.path.exists(att.file_path):
-                os.startfile(att.file_path)
+            file_path = att.file_path if os.path.exists(att.file_path or "") else None
+            if file_path:
+                stamp_and_open(file_path, proto_num, proto_date)
+            else:
+                QMessageBox.warning(self, "Αρχείο", "Το αρχείο δεν βρέθηκε.")
         elif row < len(self._pending_attachments):
-            os.startfile(self._pending_attachments[row]["path"])
+            stamp_and_open(self._pending_attachments[row]["path"], proto_num, proto_date)
 
     def _add_history_stage(self):
         from ui.dialogs import HistoryStageDialog

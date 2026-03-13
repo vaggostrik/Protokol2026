@@ -17,18 +17,21 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 from database.models import Protocol
 from utils.helpers import format_date_short
+from utils.pdf_fonts import register_greek_fonts, FONT_NORMAL, FONT_BOLD
 from config.settings import EXPORTS_DIR
 
 
 def _page_header(canvas, doc, config):
+    register_greek_fonts()
     canvas.saveState()
     org = config.get("organization_name", "")
-    canvas.setFont("Helvetica-Bold", 10)
+    canvas.setFont(FONT_BOLD, 10)
     canvas.drawCentredString(doc.pagesize[0] / 2, doc.pagesize[1] - 1.5 * cm, org)
-    canvas.setFont("Helvetica", 8)
+    canvas.setFont(FONT_NORMAL, 8)
     canvas.drawCentredString(doc.pagesize[0] / 2, doc.pagesize[1] - 2 * cm, "ΒΙΒΛΙΟ ΠΡΩΤΟΚΟΛΛΟΥ")
-    canvas.setFont("Helvetica", 7)
-    canvas.drawString(doc.leftMargin, 1.2 * cm, f"Εκτύπωση: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    canvas.setFont(FONT_NORMAL, 7)
+    canvas.drawString(doc.leftMargin, 1.2 * cm,
+                      f"Εκτύπωση: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
     canvas.drawRightString(doc.pagesize[0] - doc.rightMargin, 1.2 * cm, f"Σελίδα {doc.page}")
     canvas.restoreState()
 
@@ -42,6 +45,10 @@ def build_protocol_book(
     year: Optional[int] = None,
     direction: Optional[str] = None,
 ):
+    register_greek_fonts()
+    fn = FONT_NORMAL
+    fb = FONT_BOLD
+
     size_map = {"A4": A4, "A3": A3}
     base_size = size_map.get(paper_size.upper(), A4)
     if orientation.lower() == "landscape":
@@ -59,13 +66,13 @@ def build_protocol_book(
     )
 
     org = config.get("organization_name", "")
-    styles = getSampleStyleSheet()
-
     story = []
 
     # Cover
     story.append(Spacer(1, 1 * cm))
-    story.append(Paragraph(org, ParagraphStyle("H", fontSize=16, fontName="Helvetica-Bold", alignment=TA_CENTER)))
+    story.append(Paragraph(org, ParagraphStyle(
+        "H", fontSize=16, fontName=fb, alignment=TA_CENTER,
+        textColor=colors.HexColor("#1a365d"))))
     story.append(Spacer(1, 0.4 * cm))
     title_parts = ["ΒΙΒΛΙΟ ΠΡΩΤΟΚΟΛΛΟΥ"]
     if year:
@@ -73,16 +80,17 @@ def build_protocol_book(
     if direction:
         title_parts.append(direction)
     story.append(Paragraph(" – ".join(title_parts), ParagraphStyle(
-        "Title2", fontSize=14, fontName="Helvetica-Bold", alignment=TA_CENTER, spaceAfter=10)))
+        "Title2", fontSize=14, fontName=fb, alignment=TA_CENTER, spaceAfter=10)))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a365d")))
     story.append(Spacer(1, 0.4 * cm))
     story.append(Paragraph(
         f"Σύνολο εγγράφων: {len(protocols)}",
-        ParagraphStyle("Info", fontSize=10, alignment=TA_CENTER, textColor=colors.grey)
+        ParagraphStyle("Info", fontSize=10, fontName=fn, alignment=TA_CENTER,
+                       textColor=colors.grey)
     ))
     story.append(Spacer(1, 0.5 * cm))
 
-    # Table
+    # Table headers
     col_headers = [
         "Α/Α", "Αρ. Πρωτ.", "Ημερομηνία", "Κατεύθυνση",
         "Αποστολέας / Αποδέκτης", "Θέμα", "Κατάσταση", "Χειριστής",
@@ -97,17 +105,17 @@ def build_protocol_book(
         col_widths = [0.8*cm, 2*cm, 2*cm, 2.2*cm, 4*cm, 5*cm, 2.5*cm, 2.5*cm]
 
     header_row = [Paragraph(h, ParagraphStyle(
-        "TH", fontSize=8, fontName="Helvetica-Bold", textColor=colors.white,
+        "TH", fontSize=8, fontName=fb, textColor=colors.white,
         alignment=TA_CENTER)) for h in col_headers]
     table_data = [header_row]
 
-    cell_style = ParagraphStyle("TC", fontSize=8, leading=10)
-    bold_style = ParagraphStyle("TCB", fontSize=8, leading=10, fontName="Helvetica-Bold")
+    cell_style = ParagraphStyle("TC",  fontSize=8, leading=10, fontName=fn)
+    bold_style = ParagraphStyle("TCB", fontSize=8, leading=10, fontName=fb)
 
     direction_colors = {
         "ΕΙΣΕΡΧΟΜΕΝΟ": colors.HexColor("#e6fffa"),
-        "ΕΞΕΡΧΟΜΕΝΟ": colors.HexColor("#ebf8ff"),
-        "ΕΣΩΤΕΡΙΚΟ": colors.HexColor("#fffff0"),
+        "ΕΞΕΡΧΟΜΕΝΟ":  colors.HexColor("#ebf8ff"),
+        "ΕΣΩΤΕΡΙΚΟ":   colors.HexColor("#fffff0"),
     }
 
     for idx, p in enumerate(protocols, 1):
@@ -144,15 +152,15 @@ def build_protocol_book(
         row_bg_cmds.append(("BACKGROUND", (0, i), (-1, i), bg))
 
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a365d")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BACKGROUND",    (0, 0), (-1,  0), colors.HexColor("#1a365d")),
+        ("TEXTCOLOR",     (0, 0), (-1,  0), colors.white),
+        ("GRID",          (0, 0), (-1, -1), 0.4, colors.lightgrey),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.white, colors.HexColor("#f7fafc")]),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (1, 0), (3, -1), "CENTER"),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("ALIGN",         (0, 0), (0, -1), "CENTER"),
+        ("ALIGN",         (1, 0), (3, -1), "CENTER"),
     ] + row_bg_cmds))
 
     story.append(t)
@@ -172,7 +180,8 @@ def print_protocol_book(
     filename = f"protocol_book_{ts}.pdf"
     out_path = str(EXPORTS_DIR / filename)
     try:
-        build_protocol_book(protocols, config, out_path, paper_size, orientation, year, direction)
+        build_protocol_book(protocols, config, out_path, paper_size, orientation,
+                            year, direction)
         if sys.platform == "win32":
             os.startfile(out_path)
         elif sys.platform == "darwin":
