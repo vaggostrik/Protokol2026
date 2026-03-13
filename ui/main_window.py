@@ -6,19 +6,22 @@ from PyQt6.QtWidgets import (
     QListWidget, QListWidgetItem, QStackedWidget,
     QMenuBar, QMenu, QMessageBox, QApplication,
 )
-from PyQt6.QtCore import Qt, QSize, pyqtSlot
+from PyQt6.QtCore import Qt, QSize, pyqtSlot, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QIcon, QPixmap, QColor
 
 from config.settings import APP_NAME, APP_VERSION, load_config
-from database.models import DocumentDirection
+from database.models import DocumentDirection, RegistryType
 from ui.styles import MAIN_STYLE
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, current_user=None):
+    logoff_requested = pyqtSignal()
+
+    def __init__(self, current_user=None, registry_type: RegistryType = RegistryType.GENERAL):
         super().__init__()
         self._config = load_config()
         self._current_user = current_user
+        self._registry_type = registry_type
         is_admin = current_user and current_user.role.value == "Διαχειριστής"
         self._is_admin = is_admin
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
@@ -77,10 +80,58 @@ class MainWindow(QMainWindow):
             "border-bottom:1px solid #2a4a7f;"
         )
         sv.addWidget(header_lbl)
+
+        # Registry type label
+        reg_lbl = QLabel(f"📂  {self._registry_type.value}")
+        reg_lbl.setWordWrap(True)
+        reg_lbl.setStyleSheet(
+            "color:#bee3f8; font-size:10px; padding:4px 10px 4px 10px;"
+            "border-bottom:1px solid #2a4a7f; background:#1e3a5f;"
+        )
+        sv.addWidget(reg_lbl)
+
         sv.addWidget(self._sidebar, 1)
 
+        # User info + logoff/exit at bottom
+        from PyQt6.QtWidgets import QPushButton
+        bottom_widget = QWidget()
+        bottom_widget.setStyleSheet("background:#142d50; border-top:1px solid #2a4a7f;")
+        bv = QVBoxLayout(bottom_widget)
+        bv.setContentsMargins(8, 6, 8, 6)
+        bv.setSpacing(4)
+
+        user_name = (self._current_user.full_name if self._current_user else "—")
+        user_lbl = QLabel(f"👤  {user_name}")
+        user_lbl.setStyleSheet("color:#a0c4e8; font-size:10px; background:transparent;")
+        user_lbl.setWordWrap(True)
+        bv.addWidget(user_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_logoff = QPushButton("🔄 Αλλαγή Χρήστη")
+        btn_logoff.setStyleSheet(
+            "QPushButton{background:#2a4a7f;color:white;border:none;border-radius:4px;"
+            "padding:5px 4px;font-size:10px;}"
+            "QPushButton:hover{background:#3a5a8f;}"
+        )
+        btn_logoff.clicked.connect(self._do_logoff)
+
+        btn_exit = QPushButton("❌ Έξοδος")
+        btn_exit.setStyleSheet(
+            "QPushButton{background:#6b2737;color:white;border:none;border-radius:4px;"
+            "padding:5px 4px;font-size:10px;}"
+            "QPushButton:hover{background:#8b3747;}"
+        )
+        btn_exit.clicked.connect(QApplication.quit)
+
+        btn_row.addWidget(btn_logoff)
+        btn_row.addWidget(btn_exit)
+        bv.addLayout(btn_row)
+
+        sv.addWidget(bottom_widget)
+
         version_lbl = QLabel(f"v{APP_VERSION}")
-        version_lbl.setStyleSheet("color:#4a6fa5; font-size:10px; padding:6px 10px;")
+        version_lbl.setStyleSheet("color:#4a6fa5; font-size:10px; padding:4px 10px;"
+                                  "background:#1a365d;")
         sv.addWidget(version_lbl)
 
         main_layout.addWidget(sidebar_container)
@@ -95,7 +146,18 @@ class MainWindow(QMainWindow):
 
     def _get_page(self, key: str) -> QWidget:
         if key not in self._pages:
-            self._pages[key] = self._create_page(key)
+            try:
+                self._pages[key] = self._create_page(key)
+            except Exception as ex:
+                from PyQt6.QtWidgets import QVBoxLayout
+                placeholder = QWidget()
+                v = QVBoxLayout(placeholder)
+                lbl = QLabel(f"⚠️  Σφάλμα φόρτωσης σελίδας:\n{ex}")
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet("color:#c53030; font-size:13px; margin:40px;")
+                lbl.setWordWrap(True)
+                v.addWidget(lbl)
+                self._pages[key] = placeholder
             self._stack.addWidget(self._pages[key])
         return self._pages[key]
 
@@ -138,15 +200,23 @@ class MainWindow(QMainWindow):
             p.do_search()
             return p
         elif key == "book":
-            from ui.print_dialog import PrintBookDialog
-            # Show the dialog immediately, return placeholder
+            from PyQt6.QtWidgets import QVBoxLayout, QPushButton
+            from ui.widgets import SectionHeader
             w = QWidget()
             layout = QVBoxLayout(w)
-            from ui.widgets import SectionHeader
+            layout.setContentsMargins(24, 24, 24, 24)
+            layout.setSpacing(12)
             layout.addWidget(SectionHeader("Βιβλίο Πρωτοκόλλου"))
-            from PyQt6.QtWidgets import QPushButton
-            btn = QPushButton("Εκτύπωση Βιβλίου Πρωτοκόλλου (PDF)")
-            btn.setMaximumWidth(350)
+            reg_lbl = QLabel(f"Ενεργό βιβλίο: {self._registry_type.value}")
+            reg_lbl.setStyleSheet("color:#2b6cb0; font-size:13px; font-weight:bold;")
+            layout.addWidget(reg_lbl)
+            btn = QPushButton("📖  Εκτύπωση / Εξαγωγή Βιβλίου Πρωτοκόλλου (PDF)")
+            btn.setMaximumWidth(400)
+            btn.setStyleSheet(
+                "QPushButton{background:#2b6cb0;color:white;padding:12px 20px;"
+                "border-radius:6px;font-size:13px;font-weight:bold;}"
+                "QPushButton:hover{background:#3182ce;}"
+            )
             btn.clicked.connect(self._open_print_book)
             layout.addWidget(btn)
             layout.addStretch()
@@ -249,7 +319,11 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_new_out)
         file_menu.addAction(act_new_int)
         file_menu.addSeparator()
-        act_exit = QAction("Έξοδος\tAlt+F4", self)
+        act_logoff = QAction("🔄  Αλλαγή Χρήστη (Log-off)", self)
+        act_logoff.triggered.connect(self._do_logoff)
+        file_menu.addAction(act_logoff)
+        file_menu.addSeparator()
+        act_exit = QAction("❌  Έξοδος\tAlt+F4", self)
         act_exit.triggered.connect(QApplication.quit)
         file_menu.addAction(act_exit)
 
@@ -361,8 +435,15 @@ class MainWindow(QMainWindow):
 
     def _open_print_book(self):
         from ui.print_dialog import PrintBookDialog
-        dlg = PrintBookDialog(self)
+        dlg = PrintBookDialog(self, default_registry_type=self._registry_type)
         dlg.exec()
+
+    def _do_logoff(self):
+        from ui.widgets import ConfirmDialog
+        if ConfirmDialog.ask(self, "Αλλαγή Χρήστη",
+                             "Να αποσυνδεθείτε και να συνδεθείτε με άλλο χρήστη;"):
+            self.logoff_requested.emit()
+            self.close()
 
     def _do_backup(self):
         from PyQt6.QtWidgets import QFileDialog, QMessageBox

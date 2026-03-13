@@ -47,47 +47,64 @@ def main():
                    f"Αδυναμία αρχικοποίησης βάσης δεδομένων:\n\n{traceback.format_exc()}")
         sys.exit(1)
 
-    # ── Login ─────────────────────────────────────────────────────────────────
-    try:
-        from ui.login_dialog import LoginDialog
-        login = LoginDialog()
-        result = login.exec()
-        # Accept = 1, Reject = 0
-        if result != 1:
-            sys.exit(0)
-        current_user = login.current_user
-        if current_user is None:
-            show_error("Σφάλμα Σύνδεσης", "Δεν επιστράφηκε χρήστης. Δοκιμάστε ξανά.")
-            sys.exit(1)
-    except Exception:
-        show_error("Σφάλμα Login",
-                   f"Σφάλμα κατά τη σύνδεση:\n\n{traceback.format_exc()}")
-        sys.exit(1)
+    # ── Login / Main window loop (supports log-off and re-login) ─────────────
+    from ui.styles import MAIN_STYLE
+    app.setStyleSheet(MAIN_STYLE)
 
-    # ── Main window ───────────────────────────────────────────────────────────
-    try:
-        from ui.main_window import MainWindow
-        from ui.styles import MAIN_STYLE
-        app.setStyleSheet(MAIN_STYLE)
+    do_logoff = True  # start with login screen
+    while do_logoff:
+        do_logoff = False
 
-        window = MainWindow(current_user=current_user)
-
+        # Show login dialog
         try:
-            role_label = current_user.role.value
-            full_name  = current_user.full_name
-            window.setWindowTitle(
-                f"{APP_NAME} v{APP_VERSION}  —  {full_name} ({role_label})"
-            )
+            from ui.login_dialog import LoginDialog
+            login = LoginDialog()
+            result = login.exec()
+            if result != 1:
+                break  # user closed/cancelled login → exit
+            current_user = login.current_user
+            registry_type = login.selected_registry_type
+            if current_user is None:
+                show_error("Σφάλμα Σύνδεσης", "Δεν επιστράφηκε χρήστης. Δοκιμάστε ξανά.")
+                break
         except Exception:
-            window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+            show_error("Σφάλμα Login",
+                       f"Σφάλμα κατά τη σύνδεση:\n\n{traceback.format_exc()}")
+            break
 
-        window.show()
-    except Exception:
-        show_error("Σφάλμα Εκκίνησης",
-                   f"Αδυναμία φόρτωσης κύριου παραθύρου:\n\n{traceback.format_exc()}")
-        sys.exit(1)
+        # Show main window
+        try:
+            from ui.main_window import MainWindow
+            window = MainWindow(current_user=current_user, registry_type=registry_type)
 
-    sys.exit(app.exec())
+            try:
+                role_label = current_user.role.value
+                full_name = current_user.full_name
+                window.setWindowTitle(
+                    f"{APP_NAME} v{APP_VERSION}  —  {full_name} ({role_label})"
+                )
+            except Exception:
+                window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+
+            logoff_ref = [False]
+
+            def on_logoff():
+                logoff_ref[0] = True
+                app.quit()
+
+            window.logoff_requested.connect(on_logoff)
+            window.show()
+            app.exec()
+
+            if logoff_ref[0]:
+                do_logoff = True  # show login again
+
+        except Exception:
+            show_error("Σφάλμα Εκκίνησης",
+                       f"Αδυναμία φόρτωσης κύριου παραθύρου:\n\n{traceback.format_exc()}")
+            break
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":

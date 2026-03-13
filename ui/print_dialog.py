@@ -10,10 +10,11 @@ from PyQt6.QtCore import Qt
 
 
 class PrintBookDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, default_registry_type=None):
         super().__init__(parent)
+        self._default_registry_type = default_registry_type
         self.setWindowTitle("Εκτύπωση Βιβλίου Πρωτοκόλλου")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(420)
         self._build_ui()
 
     def _build_ui(self):
@@ -31,6 +32,20 @@ class PrintBookDialog(QDialog):
             self._cb_year.addItem(str(y), y)
         self._cb_year.setCurrentIndex(1)  # default current year
         form.addRow("Έτος:", self._cb_year)
+
+        from database.models import RegistryType
+        self._cb_registry = QComboBox()
+        self._cb_registry.addItem("Όλα τα βιβλία", None)
+        self._cb_registry.addItem("Γενικό Πρωτόκολλο", RegistryType.GENERAL.value)
+        self._cb_registry.addItem("Αιτήσεις Καταναλωτών", RegistryType.CONSUMER.value)
+        self._cb_registry.addItem("Οικονομική Υπηρεσία", RegistryType.FINANCIAL.value)
+        # Pre-select default registry type
+        if self._default_registry_type is not None:
+            for i in range(self._cb_registry.count()):
+                if self._cb_registry.itemData(i) == self._default_registry_type.value:
+                    self._cb_registry.setCurrentIndex(i)
+                    break
+        form.addRow("Βιβλίο Πρωτοκόλλου:", self._cb_registry)
 
         self._cb_direction = QComboBox()
         self._cb_direction.addItem("Όλα", None)
@@ -72,10 +87,14 @@ class PrintBookDialog(QDialog):
         s = get_session()
         year = self._cb_year.currentData()
         direction = self._cb_direction.currentData()
+        registry_type = self._cb_registry.currentData()
         paper = self._cb_paper.currentText()
         orientation = self._cb_orientation.currentData()
 
-        protocols, total = search_protocols(s, year=year, direction=direction, limit=10000)
+        protocols, total = search_protocols(
+            s, year=year, direction=direction,
+            registry_type=registry_type, limit=10000
+        )
         if total == 0:
             QMessageBox.information(self, "Πληροφορία", "Δεν βρέθηκαν εγγραφές με τα επιλεγμένα κριτήρια.")
             return

@@ -721,6 +721,16 @@ class ProtocolForm(QDialog):
             self._lbl_proto_num.setText(self._protocol.protocol_full or "")
             self._btn_receipt.setEnabled(True)
             self.saved.emit(self._protocol.id)
+
+            # Auto-archive attachments if enabled
+            try:
+                from services.archiver import archive_protocol_attachments
+                cfg = load_config()
+                if cfg.get("archive_enabled") and self._protocol.attachments:
+                    archive_protocol_attachments(self._protocol, cfg)
+            except Exception:
+                pass  # archiving failure should not block saving
+
             QMessageBox.information(self, "Επιτυχία",
                 f"Το έγγραφο αποθηκεύτηκε με αριθμό πρωτοκόλλου:\n{self._protocol.protocol_full}")
             self.accept()

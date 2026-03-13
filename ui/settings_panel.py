@@ -41,6 +41,7 @@ class SettingsPanel(QWidget):
         tabs.addTab(self._build_themes_tab(), "Θέματα")
         tabs.addTab(self._build_doc_types_tab(), "Είδη Εγγράφων")
         tabs.addTab(self._build_email_tab(), "Email / SMTP")
+        tabs.addTab(self._build_archive_tab(), "Αρχειοθέτηση")
         root.addWidget(tabs, 1)
 
     # ── Organisation ──────────────────────────────────────────────────────────
@@ -456,6 +457,100 @@ class SettingsPanel(QWidget):
             QMessageBox.information(self, "Επιτυχία", "Σύνδεση SMTP επιτυχής!")
         else:
             QMessageBox.warning(self, "Αποτυχία", f"Αδυναμία σύνδεσης:\n{msg}")
+
+    # ── Αρχειοθέτηση Εγγράφων ─────────────────────────────────────────────────
+
+    def _build_archive_tab(self) -> QWidget:
+        from PyQt6.QtWidgets import QFileDialog, QGroupBox
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+        cfg = load_config()
+
+        g = QGroupBox("Ρυθμίσεις Αρχειοθέτησης")
+        gv = QVBoxLayout(g)
+        gv.setSpacing(10)
+
+        info = QLabel(
+            "Όταν είναι ενεργοποιημένη, για κάθε αριθμό πρωτοκόλλου δημιουργείται\n"
+            "αυτόματα φάκελος με το όνομα του αρ. πρωτ. και μέσα αποθηκεύονται\n"
+            "όλα τα συνημμένα έγγραφα. Υποστηρίζεται τοπικός δίσκος ή διαδρομή\n"
+            "δικτύου/Server (π.χ. \\\\Server\\Share\\Πρωτόκολλο)."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color:#4a5568; font-size:11px;")
+        gv.addWidget(info)
+
+        self._chk_archive = QCheckBox("Ενεργοποίηση αυτόματης αρχειοθέτησης εγγράφων")
+        self._chk_archive.setChecked(cfg.get("archive_enabled", False))
+        gv.addWidget(self._chk_archive)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        path_row = QHBoxLayout()
+        self._ed_archive_path = QLineEdit(cfg.get("archive_path", ""))
+        self._ed_archive_path.setPlaceholderText(
+            r"π.χ. C:\Αρχείο\Πρωτόκολλο  ή  \\Server\Share\Πρωτόκολλο"
+        )
+        path_row.addWidget(self._ed_archive_path)
+        btn_browse = QPushButton("Αναζήτηση...")
+        btn_browse.setMaximumWidth(110)
+        btn_browse.clicked.connect(self._browse_archive_path)
+        path_row.addWidget(btn_browse)
+        form.addRow("Διαδρομή αρχειοθέτησης:", path_row)
+
+        gv.addLayout(form)
+        layout.addWidget(g)
+
+        btn_save = QPushButton("Αποθήκευση")
+        btn_save.clicked.connect(self._save_archive)
+        btn_test = QPushButton("Δοκιμή Διαδρομής")
+        btn_test.clicked.connect(self._test_archive_path)
+
+        btn_row = QHBoxLayout()
+        btn_row.addWidget(btn_test)
+        btn_row.addStretch()
+        btn_row.addWidget(btn_save)
+        layout.addLayout(btn_row)
+        layout.addStretch()
+        return w
+
+    def _browse_archive_path(self):
+        from PyQt6.QtWidgets import QFileDialog
+        path = QFileDialog.getExistingDirectory(self, "Επιλογή φακέλου αρχειοθέτησης",
+                                                 self._ed_archive_path.text() or "")
+        if path:
+            self._ed_archive_path.setText(path)
+
+    def _save_archive(self):
+        cfg = load_config()
+        cfg["archive_enabled"] = self._chk_archive.isChecked()
+        cfg["archive_path"] = self._ed_archive_path.text().strip()
+        save_config(cfg)
+        QMessageBox.information(self, "Επιτυχία", "Ρυθμίσεις αρχειοθέτησης αποθηκεύτηκαν.")
+
+    def _test_archive_path(self):
+        import os
+        path = self._ed_archive_path.text().strip()
+        if not path:
+            QMessageBox.warning(self, "Προσοχή", "Δεν έχει οριστεί διαδρομή.")
+            return
+        if os.path.isdir(path):
+            QMessageBox.information(self, "Επιτυχία",
+                                    f"Η διαδρομή υπάρχει και είναι προσβάσιμη:\n{path}")
+        else:
+            from PyQt6.QtWidgets import QMessageBox as MB
+            reply = MB.question(self, "Δεν υπάρχει",
+                                f"Η διαδρομή δεν υπάρχει:\n{path}\n\nΝα δημιουργηθεί;",
+                                MB.StandardButton.Yes | MB.StandardButton.No)
+            if reply == MB.StandardButton.Yes:
+                try:
+                    os.makedirs(path, exist_ok=True)
+                    QMessageBox.information(self, "Επιτυχία", f"Ο φάκελος δημιουργήθηκε:\n{path}")
+                except Exception as ex:
+                    QMessageBox.critical(self, "Σφάλμα", f"Αδυναμία δημιουργίας:\n{ex}")
 
     def _commit(self):
         try:

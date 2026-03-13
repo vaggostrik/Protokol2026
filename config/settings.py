@@ -39,6 +39,8 @@ DEFAULT_CONFIG = {
     "language": "el",
     "auto_backup": True,
     "backup_days": 7,
+    "archive_enabled": False,
+    "archive_path": "",
 }
 
 

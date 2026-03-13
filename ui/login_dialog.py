@@ -1,13 +1,13 @@
 """Login dialog — shown on application startup."""
 from __future__ import annotations
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QPushButton, QLabel, QLineEdit, QWidget, QApplication,
+    QDialog, QVBoxLayout, QPushButton, QLabel, QLineEdit, QComboBox, QWidget, QApplication,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QPalette, QColor
 
 from database.db import get_session, authenticate_user
-from database.models import AppUser
+from database.models import AppUser, RegistryType
 
 # Completely isolated stylesheet — overrides everything
 _LOGIN_STYLE = """
@@ -63,6 +63,17 @@ QLineEdit#loginInput:focus {
     border: 2px solid #2b6cb0;
     background-color: white;
 }
+QComboBox#loginInput {
+    background-color: white;
+    color: #1a202c;
+    border: 1.5px solid #cbd5e0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+QComboBox#loginInput:focus {
+    border: 2px solid #2b6cb0;
+}
 QPushButton#loginBtn {
     background-color: #2b6cb0;
     color: white;
@@ -85,8 +96,9 @@ class LoginDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_user: AppUser | None = None
+        self.selected_registry_type: RegistryType = RegistryType.GENERAL
         self.setWindowTitle("Σύνδεση")
-        self.setFixedSize(400, 340)
+        self.setFixedSize(400, 420)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)
         self.setStyleSheet(_LOGIN_STYLE)
         self._build_ui()
@@ -141,6 +153,16 @@ class LoginDialog(QDialog):
         self._ed_pass.setPlaceholderText("Εισάγετε κωδικό")
         self._ed_pass.returnPressed.connect(self._login)
 
+        lbl_r = QLabel("Βιβλίο Πρωτοκόλλου")
+        lbl_r.setObjectName("fieldLabel")
+        lbl_r.setContentsMargins(0, 10, 0, 0)
+        self._cb_registry = QComboBox()
+        self._cb_registry.setObjectName("loginInput")
+        self._cb_registry.setFixedHeight(40)
+        self._cb_registry.addItem("Γενικό Πρωτόκολλο", RegistryType.GENERAL)
+        self._cb_registry.addItem("Αιτήσεις Καταναλωτών", RegistryType.CONSUMER)
+        self._cb_registry.addItem("Οικονομική Υπηρεσία", RegistryType.FINANCIAL)
+
         self._lbl_error = QLabel("")
         self._lbl_error.setObjectName("errorLabel")
         self._lbl_error.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -155,6 +177,8 @@ class LoginDialog(QDialog):
         fv.addWidget(self._ed_user)
         fv.addWidget(lbl_p)
         fv.addWidget(self._ed_pass)
+        fv.addWidget(lbl_r)
+        fv.addWidget(self._cb_registry)
         fv.addSpacing(4)
         fv.addWidget(self._lbl_error)
         fv.addWidget(btn)
@@ -187,6 +211,7 @@ class LoginDialog(QDialog):
                 _ = (user.id, user.username, user.full_name,
                      user.role, user.email, user.active)
                 self.current_user = user
+                self.selected_registry_type = self._cb_registry.currentData()
                 s.close()
                 self.accept()
             else:
