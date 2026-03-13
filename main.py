@@ -84,16 +84,20 @@ def main():
     app.processEvents()
     init_db()
 
-    # Create main window
-    splash.showMessage("  Φόρτωση εφαρμογής...",
-                       Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft,
-                       QColor("white"))
-    app.processEvents()
+    # Login
+    splash.finish(None)
+    from ui.login_dialog import LoginDialog
+    login = LoginDialog()
+    if login.exec() != login.DialogCode.Accepted:
+        sys.exit(0)
+    current_user = login.current_user
 
+    # Create main window
     from ui.main_window import MainWindow
-    window = MainWindow()
+    window = MainWindow(current_user=current_user)
+    user_label = f"{current_user.full_name} ({current_user.role.value})" if current_user else ""
+    window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}  —  {user_label}")
     window.show()
-    splash.finish(window)
 
     sys.exit(app.exec())
 

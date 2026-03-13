@@ -7,10 +7,10 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from config.settings import DB_PATH
 from database.models import (
-    Base, Protocol, ProtocolCounter, DocumentDirection,
+    Base, Protocol, ProtocolCounter, DocumentDirection, RegistryType,
     ProcessingStatus, Department, JobPosition, Employee,
     Contact, RecipientList, FileFolder, DocumentTheme, DocumentType,
-    Attachment, ProtocolHistory, EmailLog,
+    Attachment, ProtocolHistory, EmailLog, AppUser, UserRole,
 )
 
 _engine = None
@@ -45,19 +45,44 @@ def get_session() -> Session:
 
 # ── Protocol number management ────────────────────────────────────────────────
 
-def next_protocol_number(session: Session, year: int) -> int:
-    counter = session.query(ProtocolCounter).filter_by(year=year).first()
+# Short prefixes per registry type
+REGISTRY_PREFIXES = {
+    RegistryType.GENERAL:   "",
+    RegistryType.CONSUMER:  "ΑΚ-",
+    RegistryType.FINANCIAL: "ΟΥ-",
+}
+
+
+def next_protocol_number(session: Session, year: int,
+                         registry_type: RegistryType = RegistryType.GENERAL) -> int:
+    reg_val = registry_type.value if isinstance(registry_type, RegistryType) else registry_type
+    counter = session.query(ProtocolCounter).filter_by(year=year, registry_type=reg_val).first()
     if counter is None:
-        counter = ProtocolCounter(year=year, last_number=0)
+        counter = ProtocolCounter(year=year, registry_type=reg_val, last_number=0)
         session.add(counter)
     counter.last_number += 1
     session.flush()
     return counter.last_number
 
 
-def format_protocol_number(number: int, year: int, prefix: str = "") -> str:
+def format_protocol_number(number: int, year: int, prefix: str = "",
+                           registry_type: RegistryType = RegistryType.GENERAL) -> str:
+    reg_prefix = REGISTRY_PREFIXES.get(registry_type, "")
     base = f"{number}/{year}"
-    return f"{prefix}{base}" if prefix else base
+    return f"{prefix}{reg_prefix}{base}" if prefix else f"{reg_prefix}{base}"
+
+
+# ── User management ───────────────────────────────────────────────────────────
+
+def authenticate_user(session: Session, username: str, password: str):
+    """Return AppUser if credentials match, else None."""
+    user = session.query(AppUser).filter_by(username=username, active=True).first()
+    if user and user.check_password(password):
+        from datetime import datetime
+        user.last_login = datetime.utcnow()
+        session.commit()
+        return user
+    return None
 
 
 # ── Create protocol ───────────────────────────────────────────────────────────
@@ -71,14 +96,16 @@ def create_protocol(
 ) -> Protocol:
     today = protocol_date or date.today()
     year = today.year
-    num = next_protocol_number(session, year)
+    registry_type = kwargs.pop("registry_type", RegistryType.GENERAL)
     prefix = kwargs.pop("prefix", "")
-    full = format_protocol_number(num, year, prefix)
+    num = next_protocol_number(session, year, registry_type)
+    full = format_protocol_number(num, year, prefix, registry_type)
 
     proto = Protocol(
         protocol_number=num,
         protocol_year=year,
         protocol_full=full,
+        registry_type=registry_type,
         direction=direction,
         subject=subject,
         protocol_date=today,
@@ -115,11 +142,14 @@ def search_protocols(
     handler_id: Optional[int] = None,
     department_id: Optional[int] = None,
     year: Optional[int] = None,
+    registry_type: Optional[str] = None,
     limit: int = 500,
     offset: int = 0,
 ):
     q = session.query(Protocol)
 
+    if registry_type:
+        q = q.filter(Protocol.registry_type == registry_type)
     if keyword:
         like = f"%{keyword}%"
         q = q.filter(or_(
@@ -187,6 +217,17 @@ def _seed_defaults():
             ]
             for code, name, direction in types:
                 s.add(DocumentType(code=code, name=name, direction=direction))
+
+        # Default admin user
+        if s.query(AppUser).count() == 0:
+            admin = AppUser(
+                username="admin",
+                full_name="Διαχειριστής",
+                role=UserRole.ADMIN,
+                active=True,
+            )
+            admin.set_password("admin123")
+            s.add(admin)
 
         # Contact types seed
         if s.query(Contact).count() == 0:

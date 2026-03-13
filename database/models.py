@@ -14,6 +14,17 @@ class Base(DeclarativeBase):
 
 # ── Enumerations ──────────────────────────────────────────────────────────────
 
+class RegistryType(str, enum.Enum):
+    GENERAL    = "Γενικό Πρωτόκολλο"
+    CONSUMER   = "Αιτήσεις Καταναλωτών"
+    FINANCIAL  = "Οικονομική Υπηρεσία"
+
+
+class UserRole(str, enum.Enum):
+    ADMIN = "Διαχειριστής"
+    USER  = "Χρήστης"
+
+
 class DocumentDirection(str, enum.Enum):
     INCOMING = "ΕΙΣΕΡΧΟΜΕΝΟ"
     OUTGOING = "ΕΞΕΡΧΟΜΕΝΟ"
@@ -183,6 +194,9 @@ class Protocol(Base):
 
     id = Column(Integer, primary_key=True)
 
+    # Registry type (Γενικό / Αιτήσεις Καταναλωτών / Οικονομική)
+    registry_type = Column(SAEnum(RegistryType), default=RegistryType.GENERAL, nullable=False, index=True)
+
     # Protocol number
     protocol_number = Column(Integer, nullable=False, index=True)
     protocol_year = Column(Integer, nullable=False, index=True)
@@ -285,8 +299,35 @@ class EmailLog(Base):
 
 
 class ProtocolCounter(Base):
-    """Yearly protocol number counter."""
+    """Yearly protocol number counter — one per registry type per year."""
     __tablename__ = "protocol_counters"
     id = Column(Integer, primary_key=True)
-    year = Column(Integer, nullable=False, unique=True)
+    year = Column(Integer, nullable=False)
+    registry_type = Column(String(50), nullable=False, default="Γενικό Πρωτόκολλο")
     last_number = Column(Integer, default=0)
+    # unique per year + registry type
+    __table_args__ = (
+        __import__("sqlalchemy").UniqueConstraint("year", "registry_type", name="uq_counter_year_registry"),
+    )
+
+
+class AppUser(Base):
+    """Application users with login credentials."""
+    __tablename__ = "app_users"
+    id = Column(Integer, primary_key=True)
+    username = Column(String(100), unique=True, nullable=False)
+    password_hash = Column(String(200), nullable=False)
+    full_name = Column(String(200), nullable=False)
+    role = Column(SAEnum(UserRole), default=UserRole.USER, nullable=False)
+    email = Column(String(200))
+    active = Column(Boolean, default=True)
+    last_login = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def set_password(self, password: str):
+        import hashlib
+        self.password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    def check_password(self, password: str) -> bool:
+        import hashlib
+        return self.password_hash == hashlib.sha256(password.encode()).hexdigest()

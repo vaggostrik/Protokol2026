@@ -15,9 +15,12 @@ from ui.styles import MAIN_STYLE
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, current_user=None):
         super().__init__()
         self._config = load_config()
+        self._current_user = current_user
+        is_admin = current_user and current_user.role.value == "Διαχειριστής"
+        self._is_admin = is_admin
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setMinimumSize(1100, 700)
         self.resize(1280, 800)
@@ -51,6 +54,8 @@ class MainWindow(QMainWindow):
             ("🔄  Εσωτερικά", "internal"),
             ("📊  Βιβλίο Πρωτ.", "book"),
             ("⚙️  Παραμετρικά", "settings"),
+            ("👥  Χρήστες", "users"),
+            ("💾  Backup", "backup"),
         ]
         self._nav_keys = [k for _, k in nav_items]
         for label, _ in nav_items:
@@ -149,7 +154,75 @@ class MainWindow(QMainWindow):
         elif key == "settings":
             from ui.settings_panel import SettingsPanel
             return SettingsPanel()
+        elif key == "users":
+            from ui.user_management import UserManagementPanel
+            w = UserManagementPanel()
+            if not self._is_admin:
+                from PyQt6.QtWidgets import QLabel, QVBoxLayout
+                placeholder = QWidget()
+                v = QVBoxLayout(placeholder)
+                lbl = QLabel("⛔  Μόνο διαχειριστές μπορούν να διαχειριστούν χρήστες.")
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet("color:#718096; font-size:14px; margin:40px;")
+                v.addWidget(lbl)
+                return placeholder
+            return w
+        elif key == "backup":
+            return self._build_backup_page()
         return QWidget()
+
+    def _build_backup_page(self) -> QWidget:
+        from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton, QFileDialog, QMessageBox
+        from ui.widgets import SectionHeader
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        layout.addWidget(SectionHeader("Backup & Επαναφορά"))
+
+        from PyQt6.QtWidgets import QGroupBox, QFormLayout
+        g = QGroupBox("Αντίγραφο Ασφαλείας")
+        gv = QVBoxLayout(g)
+        lbl = QLabel(
+            "Δημιουργεί ZIP αρχείο με τη βάση δεδομένων και όλα τα συνημμένα αρχεία.\n"
+            "Αποθηκεύστε το σε ασφαλές μέρος (USB, cloud, κλπ)."
+        )
+        lbl.setWordWrap(True)
+        gv.addWidget(lbl)
+        btn_backup = QPushButton("💾  Δημιουργία Backup")
+        btn_backup.setStyleSheet(
+            "QPushButton{background:#2b6cb0;color:white;padding:12px 24px;"
+            "border-radius:6px;font-size:14px;font-weight:bold;max-width:280px;}"
+            "QPushButton:hover{background:#3182ce;}"
+        )
+        btn_backup.clicked.connect(self._do_backup)
+        gv.addWidget(btn_backup)
+        layout.addWidget(g)
+
+        g2 = QGroupBox("Επαναφορά από Backup")
+        g2v = QVBoxLayout(g2)
+        lbl2 = QLabel(
+            "⚠️  Η επαναφορά αντικαθιστά τα υπάρχοντα δεδομένα!\n"
+            "Πριν την επαναφορά δημιουργήστε νέο backup."
+        )
+        lbl2.setWordWrap(True)
+        lbl2.setStyleSheet("color:#c05621;")
+        g2v.addWidget(lbl2)
+        btn_restore = QPushButton("📂  Επαναφορά από Backup ZIP")
+        btn_restore.setStyleSheet(
+            "QPushButton{background:#744210;color:white;padding:12px 24px;"
+            "border-radius:6px;font-size:14px;font-weight:bold;max-width:280px;}"
+            "QPushButton:hover{background:#975a16;}"
+        )
+        if not self._is_admin:
+            btn_restore.setEnabled(False)
+            btn_restore.setToolTip("Μόνο διαχειριστές μπορούν να κάνουν επαναφορά.")
+        btn_restore.clicked.connect(self._do_restore)
+        g2v.addWidget(btn_restore)
+        layout.addWidget(g2)
+
+        layout.addStretch()
+        return w
 
     def _on_nav(self, index: int):
         if 0 <= index < len(self._nav_keys):
@@ -290,6 +363,38 @@ class MainWindow(QMainWindow):
         from ui.print_dialog import PrintBookDialog
         dlg = PrintBookDialog(self)
         dlg.exec()
+
+    def _do_backup(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        dest = QFileDialog.getExistingDirectory(self, "Επιλογή φακέλου αποθήκευσης backup")
+        if not dest:
+            return
+        from services.backup import create_backup
+        from utils.helpers import file_size_human
+        try:
+            path = create_backup(dest)
+            import os
+            size = file_size_human(os.path.getsize(path))
+            QMessageBox.information(self, "Backup", f"Το backup δημιουργήθηκε:\n{path}\nΜέγεθος: {size}")
+        except Exception as ex:
+            QMessageBox.critical(self, "Σφάλμα", str(ex))
+
+    def _do_restore(self):
+        from PyQt6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Επιλογή αρχείου Backup", "", "ZIP (*.zip)")
+        if not path:
+            return
+        from ui.widgets import ConfirmDialog
+        if not ConfirmDialog.ask(self, "Επαναφορά",
+                                  "Η επαναφορά θα αντικαταστήσει ΟΛΑ τα υπάρχοντα δεδομένα!\nΣυνέχεια;"):
+            return
+        from services.backup import restore_backup
+        ok, msg = restore_backup(path)
+        if ok:
+            QMessageBox.information(self, "Επιτυχία", msg)
+        else:
+            QMessageBox.critical(self, "Σφάλμα", msg)
 
     def _show_about(self):
         QMessageBox.about(

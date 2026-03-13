@@ -16,10 +16,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 
-from database.db import get_session, create_protocol, next_protocol_number, format_protocol_number
+from database.db import get_session, create_protocol, next_protocol_number, format_protocol_number, REGISTRY_PREFIXES
 from database.models import (
     Protocol, DocumentDirection, DocumentPriority, ProcessingStatus,
-    Contact, Employee, Department, DocumentType, DocumentTheme,
+    RegistryType, Contact, Employee, Department, DocumentType, DocumentTheme,
     FileFolder, Attachment, ProtocolHistory,
 )
 from config.settings import ATTACHMENTS_DIR, load_config
@@ -122,6 +122,12 @@ class ProtocolForm(QDialog):
         g_proto = QGroupBox("Στοιχεία Πρωτοκόλλου")
         gf = QFormLayout(g_proto)
         gf.setSpacing(8)
+
+        self._cb_registry = QComboBox()
+        for rt in RegistryType:
+            self._cb_registry.addItem(rt.value, rt)
+        self._cb_registry.currentIndexChanged.connect(self._update_proto_preview)
+        gf.addRow("Τύπος Πρωτοκόλλου *:", self._cb_registry)
 
         self._cb_direction = QComboBox()
         for d in DocumentDirection:
@@ -413,6 +419,18 @@ class ProtocolForm(QDialog):
         }
         self._title_lbl.setText(titles.get(d, "Νέο Έγγραφο"))
 
+    def _update_proto_preview(self):
+        from database.models import ProtocolCounter
+        s = self._session
+        year = date.today().year
+        registry_type = self._cb_registry.currentData() or RegistryType.GENERAL
+        reg_val = registry_type.value
+        counter = s.query(ProtocolCounter).filter_by(year=year, registry_type=reg_val).first()
+        next_num = (counter.last_number + 1) if counter else 1
+        prefix = self._config.get("protocol_prefix", "")
+        preview = format_protocol_number(next_num, year, prefix, registry_type)
+        self._lbl_proto_num.setText(f"{preview} (προεπισκόπηση)")
+
     def _setup_defaults(self):
         # Pre-select direction
         for i in range(self._cb_direction.count()):
@@ -420,16 +438,7 @@ class ProtocolForm(QDialog):
                 self._cb_direction.setCurrentIndex(i)
                 break
         self._on_direction_changed()
-
-        # Preview protocol number
-        s = self._session
-        from database.models import ProtocolCounter
-        year = date.today().year
-        counter = s.query(ProtocolCounter).filter_by(year=year).first()
-        next_num = (counter.last_number + 1) if counter else 1
-        prefix = self._config.get("protocol_prefix", "")
-        preview = format_protocol_number(next_num, year, prefix)
-        self._lbl_proto_num.setText(f"{preview} (προεπισκόπηση)")
+        self._update_proto_preview()
 
     def _add_recipient(self):
         cid = self._cb_add_recipient.currentData()
@@ -635,6 +644,7 @@ class ProtocolForm(QDialog):
             if self._protocol is None:
                 # New protocol
                 prefix = self._config.get("protocol_prefix", "")
+                registry_type = self._cb_registry.currentData() or RegistryType.GENERAL
                 self._protocol = create_protocol(
                     s,
                     direction=direction,
@@ -642,6 +652,7 @@ class ProtocolForm(QDialog):
                     protocol_date=proto_date,
                     priority=priority,
                     status=status,
+                    registry_type=registry_type,
                     summary=self._ed_summary.toPlainText().strip() or None,
                     ext_protocol_number=self._ed_ext_num.text().strip() or None,
                     department_id=self._cb_department.currentData(),
