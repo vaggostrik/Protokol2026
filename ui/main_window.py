@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
             try:
                 self._pages[key] = self._create_page(key)
             except Exception as ex:
-                from PyQt6.QtWidgets import QVBoxLayout
+                from PyQt6.QtWidgets import QVBoxLayout, QLabel
                 placeholder = QWidget()
                 v = QVBoxLayout(placeholder)
                 lbl = QLabel(f"⚠️  Σφάλμα φόρτωσης σελίδας:\n{ex}")
@@ -228,7 +228,7 @@ class MainWindow(QMainWindow):
             from ui.user_management import UserManagementPanel
             w = UserManagementPanel()
             if not self._is_admin:
-                from PyQt6.QtWidgets import QLabel, QVBoxLayout
+                from PyQt6.QtWidgets import QVBoxLayout
                 placeholder = QWidget()
                 v = QVBoxLayout(placeholder)
                 lbl = QLabel("⛔  Μόνο διαχειριστές μπορούν να διαχειριστούν χρήστες.")
