@@ -1,0 +1,11 @@
+PyQt6>=6.6.0
+PyQt6-Qt6>=6.6.0
+SQLAlchemy>=2.0.0
+reportlab>=4.0.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+Pillow>=10.0.0
+pywin32>=306; sys_platform == "win32"
+pytwain>=2.1.0; sys_platform == "win32"
+secure-smtplib>=0.1.1
+python-dateutil>=2.8.2

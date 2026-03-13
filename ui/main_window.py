@@ -1,0 +1,309 @@
+"""Main application window."""
+from __future__ import annotations
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QToolBar, QStatusBar, QLabel, QSplitter,
+    QListWidget, QListWidgetItem, QStackedWidget,
+    QMenuBar, QMenu, QMessageBox, QApplication,
+)
+from PyQt6.QtCore import Qt, QSize, pyqtSlot
+from PyQt6.QtGui import QAction, QFont, QIcon, QPixmap, QColor
+
+from config.settings import APP_NAME, APP_VERSION, load_config
+from database.models import DocumentDirection
+from ui.styles import MAIN_STYLE
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self._config = load_config()
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self.setMinimumSize(1100, 700)
+        self.resize(1280, 800)
+        self.setStyleSheet(MAIN_STYLE)
+        self._build_ui()
+        self._build_menu()
+        self._build_toolbar()
+        self._build_statusbar()
+
+    # ── UI Construction ───────────────────────────────────────────────────────
+
+    def _build_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QHBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Sidebar
+        self._sidebar = QListWidget()
+        self._sidebar.setObjectName("sidebar")
+        self._sidebar.setMaximumWidth(200)
+        self._sidebar.setMinimumWidth(160)
+        self._sidebar.setSpacing(2)
+        self._sidebar.currentRowChanged.connect(self._on_nav)
+
+        nav_items = [
+            ("📋  Αναζήτηση", "search"),
+            ("📥  Εισερχόμενα", "incoming"),
+            ("📤  Εξερχόμενα", "outgoing"),
+            ("🔄  Εσωτερικά", "internal"),
+            ("📊  Βιβλίο Πρωτ.", "book"),
+            ("⚙️  Παραμετρικά", "settings"),
+        ]
+        self._nav_keys = [k for _, k in nav_items]
+        for label, _ in nav_items:
+            item = QListWidgetItem(label)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+            self._sidebar.addItem(item)
+
+        # Sidebar header
+        sidebar_container = QWidget()
+        sidebar_container.setStyleSheet("background:#1a365d;")
+        sv = QVBoxLayout(sidebar_container)
+        sv.setContentsMargins(0, 0, 0, 0)
+        sv.setSpacing(0)
+
+        header_lbl = QLabel(self._config.get("organization_name", APP_NAME))
+        header_lbl.setWordWrap(True)
+        header_lbl.setStyleSheet(
+            "color:white; font-size:12px; font-weight:bold; padding:10px 8px 8px 10px;"
+            "border-bottom:1px solid #2a4a7f;"
+        )
+        sv.addWidget(header_lbl)
+        sv.addWidget(self._sidebar, 1)
+
+        version_lbl = QLabel(f"v{APP_VERSION}")
+        version_lbl.setStyleSheet("color:#4a6fa5; font-size:10px; padding:6px 10px;")
+        sv.addWidget(version_lbl)
+
+        main_layout.addWidget(sidebar_container)
+
+        # Content area (stacked pages)
+        self._stack = QStackedWidget()
+        main_layout.addWidget(self._stack, 1)
+
+        # Pages (lazy loaded)
+        self._pages: dict = {}
+        self._sidebar.setCurrentRow(0)
+
+    def _get_page(self, key: str) -> QWidget:
+        if key not in self._pages:
+            self._pages[key] = self._create_page(key)
+            self._stack.addWidget(self._pages[key])
+        return self._pages[key]
+
+    def _create_page(self, key: str) -> QWidget:
+        if key == "search":
+            from ui.search_panel import SearchPanel
+            p = SearchPanel()
+            p.open_protocol.connect(self._open_protocol)
+            p.new_protocol.connect(self._new_protocol_by_direction)
+            return p
+        elif key == "incoming":
+            from ui.search_panel import SearchPanel
+            p = SearchPanel()
+            p.open_protocol.connect(self._open_protocol)
+            p.new_protocol.connect(self._new_protocol_by_direction)
+            # Pre-filter
+            p._cb_direction.setCurrentIndex(
+                next((i for i in range(p._cb_direction.count())
+                      if p._cb_direction.itemData(i) == "ΕΙΣΕΡΧΟΜΕΝΟ"), 0))
+            p.do_search()
+            return p
+        elif key == "outgoing":
+            from ui.search_panel import SearchPanel
+            p = SearchPanel()
+            p.open_protocol.connect(self._open_protocol)
+            p.new_protocol.connect(self._new_protocol_by_direction)
+            p._cb_direction.setCurrentIndex(
+                next((i for i in range(p._cb_direction.count())
+                      if p._cb_direction.itemData(i) == "ΕΞΕΡΧΟΜΕΝΟ"), 0))
+            p.do_search()
+            return p
+        elif key == "internal":
+            from ui.search_panel import SearchPanel
+            p = SearchPanel()
+            p.open_protocol.connect(self._open_protocol)
+            p.new_protocol.connect(self._new_protocol_by_direction)
+            p._cb_direction.setCurrentIndex(
+                next((i for i in range(p._cb_direction.count())
+                      if p._cb_direction.itemData(i) == "ΕΣΩΤΕΡΙΚΟ"), 0))
+            p.do_search()
+            return p
+        elif key == "book":
+            from ui.print_dialog import PrintBookDialog
+            # Show the dialog immediately, return placeholder
+            w = QWidget()
+            layout = QVBoxLayout(w)
+            from ui.widgets import SectionHeader
+            layout.addWidget(SectionHeader("Βιβλίο Πρωτοκόλλου"))
+            from PyQt6.QtWidgets import QPushButton
+            btn = QPushButton("Εκτύπωση Βιβλίου Πρωτοκόλλου (PDF)")
+            btn.setMaximumWidth(350)
+            btn.clicked.connect(self._open_print_book)
+            layout.addWidget(btn)
+            layout.addStretch()
+            return w
+        elif key == "settings":
+            from ui.settings_panel import SettingsPanel
+            return SettingsPanel()
+        return QWidget()
+
+    def _on_nav(self, index: int):
+        if 0 <= index < len(self._nav_keys):
+            key = self._nav_keys[index]
+            page = self._get_page(key)
+            self._stack.setCurrentWidget(page)
+
+    # ── Menu ──────────────────────────────────────────────────────────────────
+
+    def _build_menu(self):
+        mb = self.menuBar()
+
+        # File
+        file_menu = mb.addMenu("Αρχείο")
+        act_new_in = QAction("Νέο Εισερχόμενο\tCtrl+N", self)
+        act_new_in.setShortcut("Ctrl+N")
+        act_new_in.triggered.connect(lambda: self._new_protocol(DocumentDirection.INCOMING))
+        act_new_out = QAction("Νέο Εξερχόμενο\tCtrl+Shift+N", self)
+        act_new_out.setShortcut("Ctrl+Shift+N")
+        act_new_out.triggered.connect(lambda: self._new_protocol(DocumentDirection.OUTGOING))
+        act_new_int = QAction("Νέο Εσωτερικό\tCtrl+Alt+N", self)
+        act_new_int.triggered.connect(lambda: self._new_protocol(DocumentDirection.INTERNAL))
+        file_menu.addAction(act_new_in)
+        file_menu.addAction(act_new_out)
+        file_menu.addAction(act_new_int)
+        file_menu.addSeparator()
+        act_exit = QAction("Έξοδος\tAlt+F4", self)
+        act_exit.triggered.connect(QApplication.quit)
+        file_menu.addAction(act_exit)
+
+        # Search
+        search_menu = mb.addMenu("Αναζήτηση")
+        act_search = QAction("Αναζήτηση Εγγράφων\tCtrl+F", self)
+        act_search.setShortcut("Ctrl+F")
+        act_search.triggered.connect(lambda: self._sidebar.setCurrentRow(0))
+        search_menu.addAction(act_search)
+
+        # Reports
+        rep_menu = mb.addMenu("Εκτυπώσεις")
+        act_book = QAction("Βιβλίο Πρωτοκόλλου...", self)
+        act_book.triggered.connect(self._open_print_book)
+        rep_menu.addAction(act_book)
+
+        # Settings
+        cfg_menu = mb.addMenu("Παραμετρικά")
+        act_settings = QAction("Ρυθμίσεις\tCtrl+,", self)
+        act_settings.triggered.connect(lambda: self._sidebar.setCurrentRow(5))
+        cfg_menu.addAction(act_settings)
+
+        # Help
+        help_menu = mb.addMenu("Βοήθεια")
+        act_about = QAction("Σχετικά...", self)
+        act_about.triggered.connect(self._show_about)
+        help_menu.addAction(act_about)
+
+    # ── Toolbar ───────────────────────────────────────────────────────────────
+
+    def _build_toolbar(self):
+        tb = QToolBar("Κύρια Εργαλειοθήκη")
+        tb.setIconSize(QSize(16, 16))
+        tb.setMovable(False)
+        self.addToolBar(tb)
+
+        def add_btn(text, slot, style=""):
+            act = QAction(text, self)
+            act.triggered.connect(slot)
+            btn = tb.addAction(act)
+            return act
+
+        add_btn("📥 Νέο Εισερχόμενο", lambda: self._new_protocol(DocumentDirection.INCOMING))
+        add_btn("📤 Νέο Εξερχόμενο", lambda: self._new_protocol(DocumentDirection.OUTGOING))
+        add_btn("🔄 Νέο Εσωτερικό", lambda: self._new_protocol(DocumentDirection.INTERNAL))
+        tb.addSeparator()
+        add_btn("🔍 Αναζήτηση", lambda: self._sidebar.setCurrentRow(0))
+        add_btn("📖 Βιβλίο Πρωτ.", self._open_print_book)
+        tb.addSeparator()
+        add_btn("⚙️ Παραμετρικά", lambda: self._sidebar.setCurrentRow(5))
+
+    # ── Status bar ────────────────────────────────────────────────────────────
+
+    def _build_statusbar(self):
+        sb = QStatusBar()
+        self.setStatusBar(sb)
+        from database.db import get_session
+        from database.models import Protocol
+        s = get_session()
+        count = s.query(Protocol).count()
+        s.close()
+        self._status_lbl = QLabel(
+            f"  {self._config.get('organization_name', APP_NAME)}  |  "
+            f"Σύνολο εγγράφων: {count}  |  {APP_NAME} v{APP_VERSION}"
+        )
+        sb.addWidget(self._status_lbl)
+
+    # ── Actions ───────────────────────────────────────────────────────────────
+
+    def _new_protocol(self, direction: DocumentDirection):
+        from ui.protocol_form import ProtocolForm
+        dlg = ProtocolForm(direction=direction, parent=self)
+        dlg.saved.connect(self._on_protocol_saved)
+        dlg.exec()
+
+    def _new_protocol_by_direction(self, direction_str: str):
+        direction_map = {
+            "ΕΙΣΕΡΧΟΜΕΝΟ": DocumentDirection.INCOMING,
+            "ΕΞΕΡΧΟΜΕΝΟ": DocumentDirection.OUTGOING,
+            "ΕΣΩΤΕΡΙΚΟ": DocumentDirection.INTERNAL,
+        }
+        d = direction_map.get(direction_str, DocumentDirection.INCOMING)
+        self._new_protocol(d)
+
+    def _open_protocol(self, protocol_id: int):
+        from ui.protocol_form import ProtocolForm
+        dlg = ProtocolForm(protocol_id=protocol_id, parent=self)
+        dlg.saved.connect(self._on_protocol_saved)
+        dlg.exec()
+
+    def _on_protocol_saved(self, protocol_id: int):
+        # Refresh all search panels
+        for key in ["search", "incoming", "outgoing", "internal"]:
+            if key in self._pages:
+                try:
+                    self._pages[key].refresh()
+                except Exception:
+                    pass
+        # Update status bar count
+        from database.db import get_session
+        from database.models import Protocol
+        s = get_session()
+        count = s.query(Protocol).count()
+        s.close()
+        self._status_lbl.setText(
+            f"  {self._config.get('organization_name', APP_NAME)}  |  "
+            f"Σύνολο εγγράφων: {count}  |  {APP_NAME} v{APP_VERSION}"
+        )
+
+    def _open_print_book(self):
+        from ui.print_dialog import PrintBookDialog
+        dlg = PrintBookDialog(self)
+        dlg.exec()
+
+    def _show_about(self):
+        QMessageBox.about(
+            self,
+            f"Σχετικά με {APP_NAME}",
+            f"<h2>{APP_NAME}</h2>"
+            f"<p>Έκδοση: <b>{APP_VERSION}</b></p>"
+            f"<p>Σύστημα Ηλεκτρονικής Διαχείρισης Πρωτοκόλλου</p>"
+            f"<ul>"
+            f"<li>Εισερχόμενα / Εξερχόμενα / Εσωτερικά έγγραφα</li>"
+            f"<li>Ψηφιοποίηση (TWAIN Scanner)</li>"
+            f"<li>Αυτόματη αποστολή Email</li>"
+            f"<li>Εκτύπωση Βιβλίου Πρωτοκόλλου (A4/A3)</li>"
+            f"<li>Παραμετρικά τμήματα, υπάλληλοι, επαφές</li>"
+            f"</ul>"
+            f"<p><small>Δεδομένα: SQLite | UI: PyQt6 | PDF: ReportLab</small></p>"
+        )
