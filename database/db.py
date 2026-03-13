@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import date
 from typing import Optional
-from sqlalchemy import create_engine, func, or_
+from sqlalchemy import create_engine, func, or_, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from config.settings import DB_PATH
@@ -29,13 +29,39 @@ def get_engine():
 
 
 def init_db():
-    """Create all tables and seed default data."""
+    """Create all tables, run migrations, and seed default data."""
     engine = get_engine()
     Base.metadata.create_all(engine)
     global _SessionLocal
     _SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False,
                                  expire_on_commit=False)
+    _migrate_db(engine)
     _seed_defaults()
+
+
+def _migrate_db(engine):
+    """Safely add any missing columns to existing databases."""
+    migrations = [
+        # protocols table
+        ("protocols", "registry_type",
+         "ALTER TABLE protocols ADD COLUMN registry_type VARCHAR(50) "
+         "DEFAULT 'Γενικό Πρωτόκολλο'"),
+        # protocol_counters table
+        ("protocol_counters", "registry_type",
+         "ALTER TABLE protocol_counters ADD COLUMN registry_type VARCHAR(50) "
+         "DEFAULT 'Γενικό Πρωτόκολλο'"),
+    ]
+    with engine.connect() as conn:
+        for table, column, alter_sql in migrations:
+            try:
+                conn.execute(text(f"SELECT {column} FROM {table} LIMIT 1"))
+            except Exception:
+                # Column doesn't exist — add it
+                try:
+                    conn.execute(text(alter_sql))
+                    conn.commit()
+                except Exception:
+                    pass
 
 
 def get_session() -> Session:
