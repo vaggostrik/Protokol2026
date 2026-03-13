@@ -198,7 +198,8 @@ def search_protocols(
 # ── Default seed data ─────────────────────────────────────────────────────────
 
 def _seed_defaults():
-    with get_session() as s:
+    s = get_session()
+    try:
         # Document types
         if s.query(DocumentType).count() == 0:
             types = [
@@ -239,3 +240,8 @@ def _seed_defaults():
             ))
 
         s.commit()
+    except Exception as e:
+        s.rollback()
+        raise e
+    finally:
+        s.close()
