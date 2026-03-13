@@ -1,8 +1,8 @@
 """Login dialog — shown on application startup."""
 from __future__ import annotations
 from PyQt6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QPushButton, QLabel, QLineEdit, QMessageBox, QWidget,
+    QDialog, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QLineEdit, QWidget,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -16,8 +16,32 @@ class LoginDialog(QDialog):
         super().__init__(parent)
         self.current_user: AppUser | None = None
         self.setWindowTitle("Σύνδεση")
-        self.setFixedSize(380, 280)
+        self.setFixedSize(400, 320)
         self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)
+        self.setStyleSheet("""
+            QDialog { background: #f0f4f8; }
+            QLabel { color: #2d3748; font-size: 13px; }
+            QLineEdit {
+                background: white;
+                border: 1px solid #cbd5e0;
+                border-radius: 5px;
+                padding: 8px 10px;
+                font-size: 13px;
+                color: #2d3748;
+            }
+            QLineEdit:focus { border: 2px solid #3182ce; }
+            QPushButton {
+                background: #2b6cb0;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px;
+            }
+            QPushButton:hover { background: #3182ce; }
+            QPushButton:pressed { background: #2c5282; }
+        """)
         self._build_ui()
 
     def _build_ui(self):
@@ -25,69 +49,74 @@ class LoginDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
+        # ── Header ────────────────────────────────────────────────────────────
         header = QWidget()
-        header.setStyleSheet("background:#1a365d; padding:20px;")
+        header.setFixedHeight(100)
+        header.setStyleSheet("background: #1a365d;")
         hv = QVBoxLayout(header)
+        hv.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         title = QLabel("Σύστημα Πρωτοκόλλου")
-        title.setStyleSheet("color:white; font-size:18px; font-weight:bold;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("color: white; font-size: 20px; font-weight: bold;")
+
         sub = QLabel("Παρακαλώ εισάγετε τα στοιχεία σας")
-        sub.setStyleSheet("color:#bee3f8; font-size:11px;")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub.setStyleSheet("color: #bee3f8; font-size: 11px; margin-top: 4px;")
+
         hv.addWidget(title)
         hv.addWidget(sub)
         layout.addWidget(header)
 
-        # Form
-        form_widget = QWidget()
-        form_widget.setStyleSheet("background:#f7fafc; padding:10px;")
-        fv = QVBoxLayout(form_widget)
-        fv.setContentsMargins(30, 20, 30, 10)
-        fv.setSpacing(12)
+        # ── Form ──────────────────────────────────────────────────────────────
+        form = QWidget()
+        form.setStyleSheet("background: #f0f4f8;")
+        fv = QVBoxLayout(form)
+        fv.setContentsMargins(40, 24, 40, 16)
+        fv.setSpacing(14)
 
-        form = QFormLayout()
-        form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-
+        # Username
+        lbl_user = QLabel("Όνομα Χρήστη:")
+        lbl_user.setStyleSheet("color: #2d3748; font-size: 12px; font-weight: bold; margin-bottom: 2px;")
         self._ed_user = QLineEdit()
-        self._ed_user.setPlaceholderText("Όνομα χρήστη")
-        self._ed_user.setMinimumHeight(36)
-        form.addRow("Χρήστης:", self._ed_user)
+        self._ed_user.setPlaceholderText("Εισάγετε όνομα χρήστη")
+        self._ed_user.setMinimumHeight(38)
+        self._ed_user.setText("admin")
 
+        # Password
+        lbl_pass = QLabel("Κωδικός Πρόσβασης:")
+        lbl_pass.setStyleSheet("color: #2d3748; font-size: 12px; font-weight: bold; margin-bottom: 2px;")
         self._ed_pass = QLineEdit()
         self._ed_pass.setEchoMode(QLineEdit.EchoMode.Password)
-        self._ed_pass.setPlaceholderText("Κωδικός")
-        self._ed_pass.setMinimumHeight(36)
+        self._ed_pass.setPlaceholderText("Εισάγετε κωδικό")
+        self._ed_pass.setMinimumHeight(38)
         self._ed_pass.returnPressed.connect(self._login)
-        form.addRow("Κωδικός:", self._ed_pass)
-        fv.addLayout(form)
 
+        fv.addWidget(lbl_user)
+        fv.addWidget(self._ed_user)
+        fv.addWidget(lbl_pass)
+        fv.addWidget(self._ed_pass)
+
+        # Error label
         self._lbl_error = QLabel("")
-        self._lbl_error.setStyleSheet("color:#e53e3e; font-size:11px;")
         self._lbl_error.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._lbl_error.setStyleSheet("color: #e53e3e; font-size: 11px; min-height: 16px;")
         fv.addWidget(self._lbl_error)
 
+        # Login button
         btn = QPushButton("Σύνδεση")
-        btn.setMinimumHeight(40)
-        btn.setStyleSheet(
-            "QPushButton{background:#2b6cb0;color:white;border-radius:5px;"
-            "font-size:14px;font-weight:bold;}"
-            "QPushButton:hover{background:#3182ce;}"
-        )
+        btn.setMinimumHeight(42)
         btn.clicked.connect(self._login)
         fv.addWidget(btn)
 
-        layout.addWidget(form_widget, 1)
+        layout.addWidget(form, 1)
 
-        # Default hint
+        # ── Footer ────────────────────────────────────────────────────────────
         hint = QLabel("Προεπιλογή: admin / admin123")
-        hint.setStyleSheet("color:#a0aec0; font-size:10px; padding:6px;")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setStyleSheet("color: #a0aec0; font-size: 10px; padding: 8px;")
         layout.addWidget(hint)
 
-        # Pre-fill admin for first run
-        self._ed_user.setText("admin")
         self._ed_pass.setFocus()
 
     def _login(self):
@@ -96,13 +125,17 @@ class LoginDialog(QDialog):
         if not username or not password:
             self._lbl_error.setText("Συμπληρώστε όνομα χρήστη και κωδικό.")
             return
+
         s = get_session()
         user = authenticate_user(s, username, password)
-        s.close()
         if user:
+            # Access all attributes while session is open to avoid DetachedInstanceError
+            _ = user.username, user.full_name, user.role, user.email, user.active, user.id
             self.current_user = user
+            s.close()
             self.accept()
         else:
+            s.close()
             self._lbl_error.setText("Λάθος όνομα χρήστη ή κωδικός.")
             self._ed_pass.clear()
             self._ed_pass.setFocus()

@@ -33,7 +33,8 @@ def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
     global _SessionLocal
-    _SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    _SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False,
+                                 expire_on_commit=False)
     _seed_defaults()
 
 
