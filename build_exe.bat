@@ -22,7 +22,7 @@ echo [1/4] Updating pip...
 python -m pip install --upgrade pip --quiet
 
 echo [2/4] Installing libraries (this may take a few minutes)...
-pip install PyQt6 SQLAlchemy reportlab python-docx openpyxl Pillow python-dateutil pywin32 pyinstaller --quiet
+python -m pip install PyQt6 SQLAlchemy reportlab python-docx openpyxl Pillow python-dateutil pywin32 pyinstaller --quiet
 if errorlevel 1 (
     echo [ERROR] Failed to install libraries!
     pause
@@ -30,7 +30,7 @@ if errorlevel 1 (
 )
 
 echo [3/4] Building EXE (please wait 2-5 minutes)...
-pyinstaller protokol.spec --noconfirm
+python -m PyInstaller protokol.spec --noconfirm
 if errorlevel 1 (
     echo [ERROR] Failed to build EXE!
     pause
