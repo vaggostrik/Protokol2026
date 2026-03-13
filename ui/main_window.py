@@ -56,6 +56,7 @@ class MainWindow(QMainWindow):
             ("📤  Εξερχόμενα", "outgoing"),
             ("🔄  Εσωτερικά", "internal"),
             ("📊  Βιβλίο Πρωτ.", "book"),
+            ("📝  Μαζική Καταχώρηση", "bulk"),
             ("⚙️  Παραμετρικά", "settings"),
             ("👥  Χρήστες", "users"),
             ("💾  Backup", "backup"),
@@ -221,6 +222,11 @@ class MainWindow(QMainWindow):
             layout.addWidget(btn)
             layout.addStretch()
             return w
+        elif key == "bulk":
+            from ui.bulk_entry import BulkEntryPanel
+            p = BulkEntryPanel(registry_type=self._registry_type)
+            p.saved.connect(self._on_bulk_saved)
+            return p
         elif key == "settings":
             from ui.settings_panel import SettingsPanel
             return SettingsPanel()
@@ -319,6 +325,10 @@ class MainWindow(QMainWindow):
         file_menu.addAction(act_new_out)
         file_menu.addAction(act_new_int)
         file_menu.addSeparator()
+        act_bulk = QAction("📝  Μαζική Καταχώρηση", self)
+        act_bulk.triggered.connect(lambda: self._sidebar.setCurrentRow(5))
+        file_menu.addAction(act_bulk)
+        file_menu.addSeparator()
         act_logoff = QAction("🔄  Αλλαγή Χρήστη (Log-off)", self)
         act_logoff.triggered.connect(self._do_logoff)
         file_menu.addAction(act_logoff)
@@ -343,7 +353,7 @@ class MainWindow(QMainWindow):
         # Settings
         cfg_menu = mb.addMenu("Παραμετρικά")
         act_settings = QAction("Ρυθμίσεις\tCtrl+,", self)
-        act_settings.triggered.connect(lambda: self._sidebar.setCurrentRow(5))
+        act_settings.triggered.connect(lambda: self._sidebar.setCurrentRow(6))
         cfg_menu.addAction(act_settings)
 
         # Help
@@ -373,7 +383,8 @@ class MainWindow(QMainWindow):
         add_btn("🔍 Αναζήτηση", lambda: self._sidebar.setCurrentRow(0))
         add_btn("📖 Βιβλίο Πρωτ.", self._open_print_book)
         tb.addSeparator()
-        add_btn("⚙️ Παραμετρικά", lambda: self._sidebar.setCurrentRow(5))
+        add_btn("📝 Μαζική Καταχώρηση", lambda: self._sidebar.setCurrentRow(5))
+        add_btn("⚙️ Παραμετρικά", lambda: self._sidebar.setCurrentRow(6))
 
     # ── Status bar ────────────────────────────────────────────────────────────
 
@@ -413,6 +424,24 @@ class MainWindow(QMainWindow):
         dlg = ProtocolForm(protocol_id=protocol_id, parent=self)
         dlg.saved.connect(self._on_protocol_saved)
         dlg.exec()
+
+    def _on_bulk_saved(self, count: int):
+        """Called after bulk entry saves N protocols."""
+        for key in ["search", "incoming", "outgoing", "internal"]:
+            if key in self._pages:
+                try:
+                    self._pages[key].refresh()
+                except Exception:
+                    pass
+        from database.db import get_session
+        from database.models import Protocol
+        s = get_session()
+        total = s.query(Protocol).count()
+        s.close()
+        self._status_lbl.setText(
+            f"  {self._config.get('organization_name', APP_NAME)}  |  "
+            f"Σύνολο εγγράφων: {total}  |  {APP_NAME} v{APP_VERSION}"
+        )
 
     def _on_protocol_saved(self, protocol_id: int):
         # Refresh all search panels
