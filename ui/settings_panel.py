@@ -252,33 +252,48 @@ class SettingsPanel(QWidget):
     # ── Contacts ──────────────────────────────────────────────────────────────
 
     def _build_contacts_tab(self) -> QWidget:
+        # Κρατάμε αντιστοίχηση γραμμής → contact.id για αξιόπιστη αναζήτηση
+        _contact_ids: list = []
+
         def load():
-            return [(c.name, c.organization or "", c.contact_type or "", c.phone or "", c.email or "")
-                    for c in self._session.query(Contact).order_by(Contact.name).all()]
+            _contact_ids.clear()
+            rows = []
+            for c in self._session.query(Contact).filter_by(active=True).order_by(Contact.name).all():
+                _contact_ids.append(c.id)
+                rows.append((c.name, c.organization or "", c.contact_type or "",
+                              c.phone or "", c.email or ""))
+            return rows
+
         def add():
             from ui.dialogs import ContactDialog
             dlg = ContactDialog(self._session, parent=self)
             dlg.exec()
+            # Ανανέωση πίνακα γίνεται από το _crud_tab μέσω lambda
+
         def edit(table):
             row = table.currentRow()
             if row < 0:
+                QMessageBox.information(self, "Επεξεργασία", "Επιλέξτε πρώτα μια επαφή.")
                 return
-            name = table.item(row, 0).text()
-            c = self._session.query(Contact).filter_by(name=name).first()
-            if c:
-                from ui.dialogs import ContactDialog
-                dlg = ContactDialog(self._session, c.id, parent=self)
-                dlg.exec()
+            if row >= len(_contact_ids):
+                return
+            from ui.dialogs import ContactDialog
+            dlg = ContactDialog(self._session, _contact_ids[row], parent=self)
+            dlg.exec()
+
         def delete(table):
             row = table.currentRow()
             if row < 0:
                 return
-            if ConfirmDialog.ask(self, "Διαγραφή", "Να διαγραφεί η επαφή;"):
-                name = table.item(row, 0).text()
-                c = self._session.query(Contact).filter_by(name=name).first()
+            if row >= len(_contact_ids):
+                return
+            name = table.item(row, 0).text()
+            if ConfirmDialog.ask(self, "Διαγραφή", f"Να διαγραφεί η επαφή «{name}»;"):
+                c = self._session.get(Contact, _contact_ids[row])
                 if c:
                     c.active = False
                     self._commit()
+
         return self._crud_tab(["Όνομα", "Οργανισμός", "Τύπος", "Τηλέφωνο", "Email"],
                                load, add, edit, delete)
 
