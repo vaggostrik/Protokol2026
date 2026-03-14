@@ -354,25 +354,57 @@ class SettingsPanel(QWidget):
 
     def _build_themes_tab(self) -> QWidget:
         def load():
-            return [(t.code or "", t.name, "Ναι" if t.active else "Όχι")
-                    for t in self._session.query(DocumentTheme).order_by(DocumentTheme.name).all()]
+            return [(t.code or "", t.name, t.description or "", "Ναι" if t.active else "Όχι")
+                    for t in self._session.query(DocumentTheme).order_by(
+                        DocumentTheme.code, DocumentTheme.name).all()]
         def add():
-            dlg = SimpleFieldsDialog("Νέο Θέμα", [("Κωδικός", "code"), ("Όνομα *", "name")], self)
+            dlg = SimpleFieldsDialog(
+                "Νέο Θέμα",
+                [("Κωδικός", "code"), ("Όνομα *", "name"), ("Περιγραφή", "description")],
+                self,
+            )
             if dlg.exec():
-                self._session.add(DocumentTheme(code=dlg.values.get("code") or None, name=dlg.values["name"]))
+                self._session.add(DocumentTheme(
+                    code=dlg.values.get("code") or None,
+                    name=dlg.values["name"],
+                    description=dlg.values.get("description") or None,
+                ))
                 self._commit()
-        def edit(table): pass
+        def edit(table):
+            row = table.currentRow()
+            if row < 0:
+                QMessageBox.information(self, "Επεξεργασία", "Επιλέξτε πρώτα ένα θέμα από τη λίστα.")
+                return
+            old_name = table.item(row, 1).text().strip()
+            t = self._session.query(DocumentTheme).filter_by(name=old_name).first()
+            if not t:
+                return
+            dlg = SimpleFieldsDialog(
+                "Επεξεργασία Θέματος",
+                [("Κωδικός", "code"), ("Όνομα *", "name"), ("Περιγραφή", "description")],
+                self,
+                defaults={
+                    "code": t.code or "",
+                    "name": t.name,
+                    "description": t.description or "",
+                },
+            )
+            if dlg.exec():
+                t.code = dlg.values.get("code") or None
+                t.name = dlg.values["name"]
+                t.description = dlg.values.get("description") or None
+                self._commit()
         def delete(table):
             row = table.currentRow()
             if row < 0:
                 return
-            if ConfirmDialog.ask(self, "Διαγραφή", "Να διαγραφεί το θέμα;"):
-                name = table.item(row, 1).text().strip()
+            name = table.item(row, 1).text().strip()
+            if ConfirmDialog.ask(self, "Διαγραφή", f"Να διαγραφεί το θέμα «{name}»;"):
                 t = self._session.query(DocumentTheme).filter_by(name=name).first()
                 if t:
                     t.active = False
                     self._commit()
-        return self._crud_tab(["Κωδικός", "Όνομα", "Ενεργό"], load, add, edit, delete)
+        return self._crud_tab(["Κωδικός", "Όνομα", "Περιγραφή", "Ενεργό"], load, add, edit, delete)
 
     # ── Document types ────────────────────────────────────────────────────────
 
