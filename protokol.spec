@@ -1,43 +1,42 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec file for Protokol2026
-
-import sys
 from pathlib import Path
 
 block_cipher = None
+
+extra_datas = []
+if Path('resources').exists():
+    extra_datas.append(('resources', 'resources'))
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=extra_datas,
     hiddenimports=[
-        # PyQt6
         'PyQt6.QtCore',
         'PyQt6.QtWidgets',
         'PyQt6.QtGui',
         'PyQt6.QtPrintSupport',
-        # SQLAlchemy
         'sqlalchemy.dialects.sqlite',
         'sqlalchemy.pool',
-        # ReportLab
         'reportlab.graphics',
         'reportlab.platypus',
         'reportlab.lib.pagesizes',
         'reportlab.lib.styles',
         'reportlab.pdfbase.ttfonts',
-        # Other
-        'PIL._tkinter_finder',
         'email.mime.multipart',
         'email.mime.text',
         'email.mime.base',
+        'PIL._tkinter_finder',
+        'PIL.Image',
+        'win32com.client',   # WIA scanner
+        'win32com.shell',
+        'pywintypes',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'matplotlib', 'numpy', 'scipy', 'pandas'],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
+    excludes=['tkinter', 'matplotlib', 'numpy', 'scipy', 'pandas', 'twain'],
     cipher=block_cipher,
     noarchive=False,
 )
@@ -54,13 +53,13 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,          # Χωρίς console παράθυρο
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # icon='resources/icon.ico',  # Uncomment αν έχεις εικονίδιο
+    # icon='resources/icon.ico',
 )
 
 coll = COLLECT(
