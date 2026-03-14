@@ -79,12 +79,12 @@ Protokol2026/
 4. Καταχωρείστε έγγραφα με **+ Εισερχόμενο / + Εξερχόμενο / + Εσωτερικό**
 5. Εκτυπώστε βιβλίο πρωτοκόλλου από **Εκτυπώσεις → Βιβλίο Πρωτοκόλλου**
 
-## Scanner (TWAIN)
+## Scanner (Windows WIA drivers)
 
-Για χρήση φυσικού σαρωτή στα Windows:
-```bash
-pip install pytwain
-```
+Requirements:
+- Python 3.13 x64
+- pip install PyQt6 SQLAlchemy reportlab Pillow python-dateutil pywin32 pyinstaller
+- Scanner: Windows WIA drivers (built-in) + Epson drivers
 
 ## Τεχνολογίες
 
