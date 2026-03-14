@@ -497,13 +497,28 @@ class SettingsPanel(QWidget):
         QMessageBox.information(self, "Επιτυχία", "Ρυθμίσεις SMTP αποθηκεύτηκαν.")
 
     def _test_email(self):
-        from services.email_service import test_smtp
+        from services.email_service import send_email
         cfg = load_config()
-        ok, msg = test_smtp(cfg)
+        user = cfg.get("smtp_user", "").strip()
+        if not user:
+            QMessageBox.warning(self, "Σφάλμα", "Συμπληρώστε πρώτα το Username (email αποστολέα).")
+            return
+        ok, msg = send_email(
+            cfg,
+            to=[user],
+            subject="✅ Δοκιμαστικό Email – Σύστημα Πρωτοκόλλου",
+            body=(
+                "Αυτό είναι ένα δοκιμαστικό email από το Σύστημα Πρωτοκόλλου.\n\n"
+                "Αν το λαμβάνετε, οι ρυθμίσεις SMTP είναι σωστές."
+            ),
+        )
         if ok:
-            QMessageBox.information(self, "Επιτυχία", "Σύνδεση SMTP επιτυχής!")
+            QMessageBox.information(
+                self, "Επιτυχία",
+                f"Δοκιμαστικό email στάλθηκε επιτυχώς στο:\n{user}"
+            )
         else:
-            QMessageBox.warning(self, "Αποτυχία", f"Αδυναμία σύνδεσης:\n{msg}")
+            QMessageBox.warning(self, "Αποτυχία", f"Αδυναμία αποστολής:\n{msg}")
 
     # ── Αρχειοθέτηση Εγγράφων ─────────────────────────────────────────────────
 
